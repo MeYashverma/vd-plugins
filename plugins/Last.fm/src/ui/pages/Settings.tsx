@@ -1,10 +1,10 @@
 import { plugin } from "@vendetta";
+import { findByProps } from "@vendetta/metro";
+import { React } from "@vendetta/metro/common";
 import { getAssetIDByName } from "@vendetta/ui/assets";
 import { showToast } from "@vendetta/ui/toasts";
-import { React } from "@vendetta/metro/common";
-import { View, Linking } from "react-native";
+import { Linking } from "react-native";
 import { changelog, currentVersion } from "../../changelog";
-import { findByProps } from "@vendetta/metro";
 
 const { ScrollView } = findByProps("ScrollView");
 const { TableRowGroup, TableSwitchRow, Stack, TableRow } = findByProps(
@@ -16,7 +16,7 @@ const { TableRowGroup, TableSwitchRow, Stack, TableRow } = findByProps(
 const { TextInput } = findByProps("TextInput");
 const { FormText } = findByProps("FormText");
 
-import { currentSettings, pluginState } from "../..";
+import { pluginState } from "../..";
 import Constants from "../../constants";
 import { initialize } from "../../manager";
 import { lastfmClient } from "../../utils/lastfm";
@@ -170,6 +170,32 @@ export default function Settings() {
             onValueChange={(value: boolean) => {
               set("verboseLogging", value);
               update();
+            }}
+          />
+          <TableRow
+            label="Idle Display Mode"
+            subLabel={
+              Constants.IDLE_DISPLAY_OPTIONS.find(
+                (opt) => opt.value === get("idleDisplayMode", Constants.DEFAULT_SETTINGS.idleDisplayMode)
+              )?.label || "Last Played Song"
+            }
+            trailing={<TableRow.Arrow />}
+            onPress={() => {
+              // Show a simple picker dialog (replace with your UI framework's picker if available)
+              const options = Constants.IDLE_DISPLAY_OPTIONS.map((opt) => opt.label).join("\n");
+              const selected = prompt(
+                `Select idle display mode:\n${options}`,
+                String(
+                  Constants.IDLE_DISPLAY_OPTIONS.findIndex(
+                    (opt) => opt.value === get("idleDisplayMode", Constants.DEFAULT_SETTINGS.idleDisplayMode)
+                  ) + 1
+                )
+              );
+              const idx = Number(selected) - 1;
+              if (!isNaN(idx) && Constants.IDLE_DISPLAY_OPTIONS[idx]) {
+                set("idleDisplayMode", Constants.IDLE_DISPLAY_OPTIONS[idx].value);
+                update();
+              }
             }}
           />
         </TableRowGroup>

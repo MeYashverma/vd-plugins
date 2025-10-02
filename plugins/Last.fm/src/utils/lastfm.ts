@@ -1,9 +1,62 @@
+// ...existing code...
+
+// Add these methods to the main LastFMClient class body below:
+//
+//   public async fetchTopArtist(): Promise<{ name: string; url: string; image?: string }> {
+//     this.validateSettings();
+//     const data = await this.makeRequest({
+//       method: "user.gettopartists",
+//       user: currentSettings.username,
+//       limit: "1",
+//     });
+//     const artist = data?.topartists?.artist?.[0];
+//     if (!artist) throw new Error("No top artist found");
+//     return {
+//       name: artist.name,
+//       url: artist.url,
+//       image: artist.image?.find((x: any) => x.size === "large")?.["#text"],
+//     };
+//   }
+//
+//   public async fetchTopTrack(): Promise<{ name: string; artist: string; url: string; image?: string }> {
+//     this.validateSettings();
+//     const data = await this.makeRequest({
+//       method: "user.gettoptracks",
+//       user: currentSettings.username,
+//       limit: "1",
+//     });
+//     const track = data?.toptracks?.track?.[0];
+//     if (!track) throw new Error("No top track found");
+//     return {
+//       name: track.name,
+//       artist: track.artist?.name,
+//       url: track.url,
+//       image: track.image?.find((x: any) => x.size === "large")?.["#text"],
+//     };
+//   }
+//
+//   public async fetchTopAlbum(): Promise<{ name: string; artist: string; url: string; image?: string }> {
+//     this.validateSettings();
+//     const data = await this.makeRequest({
+//       method: "user.gettopalbums",
+//       user: currentSettings.username,
+//       limit: "1",
+//     });
+//     const album = data?.topalbums?.album?.[0];
+//     if (!album) throw new Error("No top album found");
+//     return {
+//       name: album.name,
+//       artist: album.artist?.name,
+//       url: album.url,
+//       image: album.image?.find((x: any) => x.size === "large")?.["#text"],
+//     };
+//   }
+import { getAssetIDByName } from "@vendetta/ui/assets";
+import { showToast } from "@vendetta/ui/toasts";
 import { currentSettings } from "..";
 import { Track } from "../../../defs";
 import Constants from "../constants";
 import { setDebugInfo } from "./debug";
-import { showToast } from "@vendetta/ui/toasts";
-import { getAssetIDByName } from "@vendetta/ui/assets";
 
 interface LastFMError {
   error: number;
@@ -16,6 +69,29 @@ interface LastFMResponse {
   };
   track?: {
     duration: string;
+  };
+  topartists?: {
+    artist: Array<{
+      name: string;
+      url: string;
+      image?: { size: string; "#text": string }[];
+    }>;
+  };
+  toptracks?: {
+    track: Array<{
+      name: string;
+      artist: { name: string };
+      url: string;
+      image?: { size: string; "#text": string }[];
+    }>;
+  };
+  topalbums?: {
+    album: Array<{
+      name: string;
+      artist: { name: string };
+      url: string;
+      image?: { size: string; "#text": string }[];
+    }>;
   };
   error?: number;
   message?: string;
@@ -44,11 +120,69 @@ interface LastFMTrack {
 }
 
 class LastFMClient {
+  /**
+   * Fetches the user's top artist
+   */
+  public async fetchTopArtist(): Promise<{ name: string; url: string; image?: string }> {
+    this.validateSettings();
+    const data = await this.makeRequest({
+      method: "user.gettopartists",
+      user: currentSettings.username,
+      limit: "1",
+    });
+    const artist = data?.topartists?.artist?.[0];
+    if (!artist) throw new Error("No top artist found");
+    return {
+      name: artist.name,
+      url: artist.url,
+      image: artist.image?.find((x: any) => x.size === "large")?.["#text"],
+    };
+  }
+
+  /**
+   * Fetches the user's top track
+   */
+  public async fetchTopTrack(): Promise<{ name: string; artist: string; url: string; image?: string }> {
+    this.validateSettings();
+    const data = await this.makeRequest({
+      method: "user.gettoptracks",
+      user: currentSettings.username,
+      limit: "1",
+    });
+    const track = data?.toptracks?.track?.[0];
+    if (!track) throw new Error("No top track found");
+    return {
+      name: track.name,
+      artist: track.artist?.name,
+      url: track.url,
+      image: track.image?.find((x: any) => x.size === "large")?.["#text"],
+    };
+  }
+
+  /**
+   * Fetches the user's top album
+   */
+  public async fetchTopAlbum(): Promise<{ name: string; artist: string; url: string; image?: string }> {
+    this.validateSettings();
+    const data = await this.makeRequest({
+      method: "user.gettopalbums",
+      user: currentSettings.username,
+      limit: "1",
+    });
+    const album = data?.topalbums?.album?.[0];
+    if (!album) throw new Error("No top album found");
+    return {
+      name: album.name,
+      artist: album.artist?.name,
+      url: album.url,
+      image: album.image?.find((x: any) => x.size === "large")?.["#text"],
+    };
+  }
   private static instance: LastFMClient;
   private retryCount: number = 0;
   private lastError: number = 0;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): LastFMClient {
     if (!LastFMClient.instance) {
@@ -128,9 +262,14 @@ class LastFMClient {
       this.retryCount = 0;
 
       const isNowPlaying = Boolean(lastTrack["@attr"]?.nowplaying);
-      const from = isNowPlaying
-        ? Math.floor(Date.now() / 1000)
-        : parseInt(lastTrack?.date?.uts);
+      let from: number;
+      if (isNowPlaying) {
+        from = Math.floor(Date.now() / 1000);
+      } else if (lastTrack?.date && typeof lastTrack.date === "object" && "uts" in lastTrack.date) {
+        from = parseInt((lastTrack.date as any).uts);
+      } else {
+        from = Math.floor(Date.now() / 1000);
+      }
 
       let to: number | null = null;
       try {
@@ -179,16 +318,11 @@ class LastFMClient {
     }
   }
 
-  private async handleAlbumCover(cover?: string): Promise<string | null> {
+  public async handleAlbumCover(cover?: string): Promise<string | null> {
     if (!cover) return null;
-
-    // If the cover is a default one, return null
-    if (
-      Constants.LFM_DEFAULT_COVER_HASHES.some((hash) => cover.includes(hash))
-    ) {
+    if (Constants.LFM_DEFAULT_COVER_HASHES.some((hash) => cover.includes(hash))) {
       return null;
     }
-
     return cover;
   }
 
@@ -215,6 +349,6 @@ export async function fetchLatestScrobble(): Promise<
  * Handles album cover processing
  * @param cover The album cover given by Last.fm
  */
-export async function handleAlbumCover(cover: string): Promise<string> {
+export async function handleAlbumCover(cover: string): Promise<string | null> {
   return lastfmClient.handleAlbumCover(cover);
 }

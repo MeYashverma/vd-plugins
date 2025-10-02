@@ -26,7 +26,16 @@ const Constants = {
     listeningTo: true,
     ignoreSpotify: true,
     verboseLogging: false,
+    idleDisplayMode: "lastPlayed", // "lastPlayed" | "topArtist" | "topSong" | "topAlbum"
   } /** GitHub repository URL */,
+
+  /** Idle display mode options */
+  IDLE_DISPLAY_OPTIONS: [
+    { label: "Last Played Song", value: "lastPlayed" },
+    { label: "Top Artist", value: "topArtist" },
+    { label: "Top Song", value: "topSong" },
+    { label: "Top Album", value: "topAlbum" },
+  ],
   GITHUB_URL: "https://github.com/kmmiio99o/letup",
   /** GitHub commits URL */
   GITHUB_COMMITS_URL: "https://github.com/kmmiio99o/letup/commits/main/",

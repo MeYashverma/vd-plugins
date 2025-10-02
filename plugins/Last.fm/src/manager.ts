@@ -1,5 +1,3 @@
-import { getAssetIDByName } from "@vendetta/ui/assets";
-import { showToast } from "@vendetta/ui/toasts";
 
 import { currentSettings, pluginState } from ".";
 import { Activity } from "../../defs";
@@ -7,13 +5,13 @@ import Constants from "./constants";
 import { SelfPresenceStore } from "./modules";
 import { clearActivity, fetchAsset, sendRequest } from "./utils/activity";
 import { setDebugInfo } from "./utils/debug";
+import { lastfmClient } from "./utils/lastfm";
 
 function formatTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
-import { lastfmClient } from "./utils/lastfm";
 
 enum ActivityType {
   PLAYING = 0,
@@ -32,7 +30,7 @@ class PluginManager {
   private consecutiveFailures: number = 0;
   private isReconnecting: boolean = false;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): PluginManager {
     if (!PluginManager.instance) {
@@ -74,9 +72,99 @@ class PluginManager {
       const lastTrack = await lastfmClient.fetchLatestScrobble();
       setDebugInfo("lastTrack", lastTrack);
 
+
       if (!lastTrack.nowPlaying) {
         verboseLog("Last track is not currently playing");
-        clearActivity();
+        // Idle display logic
+        let idleMode = currentSettings.idleDisplayMode || Constants.DEFAULT_SETTINGS.idleDisplayMode;
+        let idleActivity: Partial<Activity> | null = null;
+        try {
+          if (idleMode === "lastPlayed") {
+            idleActivity = {
+              name: currentSettings.appName || Constants.DEFAULT_APP_NAME,
+              flags: 0,
+              type: currentSettings.listeningTo ? ActivityType.LISTENING : ActivityType.PLAYING,
+              details: lastTrack.name,
+              state: `by ${lastTrack.artist}`,
+              application_id: Constants.APPLICATION_ID,
+            };
+            if (lastTrack.album) {
+              const asset = await fetchAsset([lastTrack.albumArt]);
+              if (asset[0]) {
+                idleActivity.assets = {
+                  large_image: asset[0],
+                  large_text: `on ${lastTrack.album}`,
+                };
+              }
+            }
+          } else if (idleMode === "topArtist") {
+            const topArtist = await lastfmClient.fetchTopArtist();
+            idleActivity = {
+              name: currentSettings.appName || Constants.DEFAULT_APP_NAME,
+              flags: 0,
+              type: ActivityType.LISTENING,
+              details: `Top Artist: ${topArtist.name}`,
+              state: "",
+              application_id: Constants.APPLICATION_ID,
+            };
+            if (topArtist.image) {
+              const asset = await fetchAsset([topArtist.image]);
+              if (asset[0]) {
+                idleActivity.assets = {
+                  large_image: asset[0],
+                  large_text: topArtist.name,
+                };
+              }
+            }
+          } else if (idleMode === "topSong") {
+            const topTrack = await lastfmClient.fetchTopTrack();
+            idleActivity = {
+              name: currentSettings.appName || Constants.DEFAULT_APP_NAME,
+              flags: 0,
+              type: ActivityType.LISTENING,
+              details: `Top Song: ${topTrack.name}`,
+              state: `by ${topTrack.artist}`,
+              application_id: Constants.APPLICATION_ID,
+            };
+            if (topTrack.image) {
+              const asset = await fetchAsset([topTrack.image]);
+              if (asset[0]) {
+                idleActivity.assets = {
+                  large_image: asset[0],
+                  large_text: topTrack.name,
+                };
+              }
+            }
+          } else if (idleMode === "topAlbum") {
+            const topAlbum = await lastfmClient.fetchTopAlbum();
+            idleActivity = {
+              name: currentSettings.appName || Constants.DEFAULT_APP_NAME,
+              flags: 0,
+              type: ActivityType.LISTENING,
+              details: `Top Album: ${topAlbum.name}`,
+              state: `by ${topAlbum.artist}`,
+              application_id: Constants.APPLICATION_ID,
+            };
+            if (topAlbum.image) {
+              const asset = await fetchAsset([topAlbum.image]);
+              if (asset[0]) {
+                idleActivity.assets = {
+                  large_image: asset[0],
+                  large_text: topAlbum.name,
+                };
+              }
+            }
+          }
+        } catch (e) {
+          verboseLog("Idle status fetch failed", e);
+        }
+        if (idleActivity) {
+          verboseLog("Setting idle activity:", idleActivity);
+          await sendRequest(idleActivity as Activity);
+          pluginState.lastActivity = idleActivity as Activity;
+        } else {
+          clearActivity();
+        }
         return;
       }
 
@@ -93,8 +181,9 @@ class PluginManager {
           : ActivityType.PLAYING,
         details: lastTrack.name,
         state: `by ${lastTrack.artist}`,
-        status_display_type: 1,
         application_id: Constants.APPLICATION_ID,
+        assets: {},
+        buttons: [],
       };
 
       // Handle dynamic app name
@@ -122,11 +211,10 @@ class PluginManager {
         if (asset[0]) {
           activity.assets = {
             large_image: asset[0],
-            large_text: `on ${lastTrack.album}${
-              currentSettings.showTimestamp && lastTrack.to
+            large_text: `on ${lastTrack.album}${currentSettings.showTimestamp && lastTrack.to
                 ? ` • ${formatTime((lastTrack.to - lastTrack.from) / 1000)}`
                 : ""
-            }`,
+              }`,
           };
         }
       }
@@ -148,7 +236,6 @@ class PluginManager {
 
   private handleError(error: Error) {
     this.consecutiveFailures++;
-    setDebugInfo("lastError", error);
 
     if (this.consecutiveFailures >= Constants.MAX_RETRY_ATTEMPTS) {
       verboseLog(
@@ -180,7 +267,7 @@ class PluginManager {
 
   private stopReconnection() {
     if (this.reconnectTimer) {
-      clearInterval(this.reconnectTimer);
+      clearInterval(this.reconnectTimer as unknown as number);
       this.reconnectTimer = undefined;
     }
     this.isReconnecting = false;
@@ -192,7 +279,7 @@ class PluginManager {
    */
   private stopUpdates() {
     if (this.updateTimer) {
-      clearInterval(this.updateTimer);
+      clearInterval(this.updateTimer as unknown as number);
       this.updateTimer = undefined;
     }
   }
